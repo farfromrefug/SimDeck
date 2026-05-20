@@ -2377,6 +2377,7 @@
 .device-screen-backing {
   position: absolute;
   background: #000000;
+  box-shadow: 0 0 0 2px #000000;
   pointer-events: none;
   z-index: 0;
 }
