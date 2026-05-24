@@ -68,6 +68,7 @@ const FOREGROUND_APP_ROUTE_TIMEOUT: Duration = Duration::from_millis(1200);
 const APP_UPLOAD_FILE_NAME_HEADER: &str = "x-simdeck-filename";
 const MAX_APP_UPLOAD_BYTES: usize = 1024 * 1024 * 1024;
 const FOREGROUND_PROCESS_PROBE_TIMEOUT: Duration = Duration::from_millis(750);
+const ACCESSIBILITY_SOURCE_DISCOVERY_TIMEOUT: Duration = Duration::from_millis(250);
 const ACCESSIBILITY_TREE_CACHE_TTL: Duration = Duration::from_secs(5);
 const NATIVE_AX_SNAPSHOT_RETRY_ATTEMPTS: usize = 5;
 const NATIVE_AX_SNAPSHOT_RETRY_DELAY: Duration = Duration::from_millis(100);
@@ -3884,7 +3885,7 @@ async fn native_ax_accessibility_tree_value(
     include_hidden: bool,
     interactive_only: bool,
 ) -> Result<Value, AppError> {
-    let available_sources = available_sources_with_native_ax(None);
+    let available_sources = native_ax_available_sources(&state, &udid).await;
     match accessibility_snapshot_with_retries(state, udid, None, max_depth, interactive_only).await
     {
         Ok(native_snapshot) => {
@@ -3912,6 +3913,25 @@ async fn native_ax_accessibility_tree_value(
             } else {
                 snapshot
             })
+        }
+    }
+}
+
+async fn native_ax_available_sources(state: &AppState, udid: &str) -> Vec<String> {
+    match timeout(
+        ACCESSIBILITY_SOURCE_DISCOVERY_TIMEOUT,
+        inspector_session_for_state(state, udid),
+    )
+    .await
+    {
+        Ok(Ok(session)) => available_sources_with_native_ax(Some(&session)),
+        Ok(Err(error)) => {
+            tracing::debug!("Native AX source discovery found no inspector for {udid}: {error}");
+            available_sources_with_native_ax(None)
+        }
+        Err(_) => {
+            tracing::debug!("Native AX source discovery timed out for {udid}");
+            available_sources_with_native_ax(None)
         }
     }
 }
@@ -4074,15 +4094,7 @@ async fn inspector_session_for_state(
     state: &AppState,
     udid: &str,
 ) -> Result<InspectorSession, String> {
-    let frontmost_pid = foreground_app_for_simulator_with_cache_ttl(
-        state,
-        udid,
-        INSPECTOR_FOREGROUND_APP_CACHE_TTL,
-    )
-    .await
-    .ok()
-    .flatten()
-    .map(|foreground| foreground.process_identifier);
+    let frontmost_pid = inspector_frontmost_process_identifier(state, udid).await;
     let connected_error = match connected_inspector_session(state, udid, frontmost_pid).await {
         Ok(session) => return Ok(session),
         Err(error) => error,
@@ -4096,6 +4108,19 @@ async fn inspector_session_for_state(
         Ok(session) => Ok(session),
         Err(tcp_error) => Err(format!("{connected_error} {registry_error} {tcp_error}")),
     }
+}
+
+async fn inspector_frontmost_process_identifier(state: &AppState, udid: &str) -> Option<i64> {
+    match frontmost_process_identifier(state, udid).await {
+        Ok(Some(process_identifier)) => return Some(process_identifier),
+        Ok(None) | Err(_) => {}
+    }
+
+    foreground_app_for_simulator_with_cache_ttl(state, udid, INSPECTOR_FOREGROUND_APP_CACHE_TTL)
+        .await
+        .ok()
+        .flatten()
+        .map(|foreground| foreground.process_identifier)
 }
 
 async fn inspector_session_for_process(
@@ -5821,7 +5846,8 @@ async fn accessibility_snapshot_with_options(
 mod tests {
     use super::{
         accessibility_point_snapshot, attach_tree_metadata, available_sources_for_snapshot,
-        best_inspector_session, chrome_devtools_source_for_session, client_stats_foreground,
+        available_sources_with_native_ax, best_inspector_session,
+        chrome_devtools_source_for_session, client_stats_foreground,
         compact_accessibility_snapshot, element_matches_selector, first_matching_element,
         inspector_available_sources, inspector_metadata, inspector_session_from_published,
         inspector_session_score, is_inspector_agent_transport_path,
@@ -6318,6 +6344,21 @@ mod tests {
 
         assert_eq!(
             sources,
+            vec![SOURCE_REACT_NATIVE.to_owned(), SOURCE_NATIVE_AX.to_owned()]
+        );
+    }
+
+    #[test]
+    fn native_ax_available_sources_preserve_inspector_sources() {
+        let session = InspectorSession {
+            transport: InspectorSessionTransport::Connected,
+            available_sources: vec![SOURCE_REACT_NATIVE.to_owned()],
+            info: Value::Null,
+            process_identifier: 42,
+        };
+
+        assert_eq!(
+            available_sources_with_native_ax(Some(&session)),
             vec![SOURCE_REACT_NATIVE.to_owned(), SOURCE_NATIVE_AX.to_owned()]
         );
     }
