@@ -5,7 +5,7 @@
 
   <p align="center">
     SimDeck is a developer tool built for streamlining mobile app development using agents.
-    Drive iOS Simulators and Android emulators from browser & CLI.
+    Drive iOS Simulators and Android emulators from your favorite IDE & CLI.
   </p>
 </p>
 
