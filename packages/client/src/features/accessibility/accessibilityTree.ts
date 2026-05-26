@@ -156,9 +156,10 @@ function buildItem(
   depth: number,
 ): AccessibilityTreeItem {
   const compacted = compactInspectorChain(node, id);
+  const children = visibleAccessibilityChildren(compacted.node);
   return {
     chain: compacted.chain,
-    children: (compacted.node.children ?? []).map((child, index) =>
+    children: children.map((child, index) =>
       buildItem(child, `${compacted.id}.${index}`, depth + 1),
     ),
     depth,
@@ -546,6 +547,25 @@ function isGeneratedReactNativeText(
   return /^\d+$/.test(text);
 }
 
+function visibleAccessibilityChildren(
+  node: AccessibilityNode,
+): AccessibilityNode[] {
+  if (
+    isReactNativeTextDisplayNode(node) &&
+    Boolean(primaryAccessibilityText(node))
+  ) {
+    return [];
+  }
+  return node.children ?? [];
+}
+
+function isReactNativeTextDisplayNode(node: AccessibilityNode): boolean {
+  if (node.source !== "react-native") {
+    return false;
+  }
+  return stripReactNativePrefix(cleanText(node.type) ?? "") === "Text";
+}
+
 function frameContainsPoint(
   frame: AccessibilityFrame | null | undefined,
   point: { x: number; y: number },
@@ -568,8 +588,12 @@ function displayAccessibilityKind(
   source: AccessibilityNode["source"],
   kind: string,
 ): string {
-  if (source === "react-native" && kind === "RCTView") {
-    return "View";
+  if (source === "react-native") {
+    return stripReactNativePrefix(kind);
   }
   return kind;
+}
+
+function stripReactNativePrefix(kind: string): string {
+  return kind.startsWith("RCT") && kind.length > 3 ? kind.slice(3) : kind;
 }

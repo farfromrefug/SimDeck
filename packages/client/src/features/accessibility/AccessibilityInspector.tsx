@@ -988,7 +988,10 @@ function objectClassName(value: Record<string, unknown> | null | undefined) {
 }
 
 function displayClassName(value: string | null | undefined): string {
-  return value === "RCTView" ? "View" : (value ?? "");
+  const className = value ?? "";
+  return className.startsWith("RCT") && className.length > 3
+    ? className.slice(3)
+    : className;
 }
 
 function nativeScriptDescription(

@@ -11,10 +11,43 @@ import {
 } from "./accessibilityTree";
 
 describe("buildAccessibilityTree", () => {
-  it("renders React Native RCTView nodes as View", () => {
+  it("renders React Native RCT-prefixed nodes without the prefix", () => {
     expect(accessibilityKind({ source: "react-native", type: "RCTView" })).toBe(
       "View",
     );
+    expect(
+      accessibilityKind({ source: "react-native", type: "RCTScrollView" }),
+    ).toBe("ScrollView");
+    expect(accessibilityKind({ source: "react-native", type: "RCTText" })).toBe(
+      "Text",
+    );
+  });
+
+  it("hides internal React Native text children when the Text node has text", () => {
+    const roots: AccessibilityNode[] = [
+      {
+        source: "react-native",
+        type: "Text",
+        title: "Welcome",
+        children: [
+          {
+            source: "react-native",
+            type: "RCTText",
+            title: "Welcome",
+            children: [
+              { source: "react-native", type: "Text", title: "Wel" },
+              { source: "react-native", type: "Text", title: "come" },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const tree = buildAccessibilityTree(roots);
+
+    expect(accessibilityKind(tree[0].node)).toBe("Text");
+    expect(primaryAccessibilityText(tree[0].node)).toBe("Welcome");
+    expect(tree[0].children).toHaveLength(0);
   });
 
   it("compacts framed React Native wrapper chains until meaningful children", () => {
