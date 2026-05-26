@@ -18,7 +18,7 @@ Deploy from the Cloudflare dashboard with:
 
 - Root directory: `packages/ci-proxy-worker`
 - Install command: `npm ci`
-- Build command: `npm run check`
+- Build command: `npm run build`
 - Deploy command: `npm run deploy`
 
 Or deploy locally:
