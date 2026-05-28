@@ -66,6 +66,8 @@ const SERVER_HEALTH_WATCHDOG_STALE_HEARTBEAT: Duration = Duration::from_secs(60)
 const SERVER_HEALTH_WATCHDOG_FAILURE_THRESHOLD: usize = 12;
 const SERVER_HEALTH_WATCHDOG_HTTP_FAILURE_THRESHOLD: usize = 3;
 const SERVICE_PORT: u16 = 4310;
+const ORPHAN_WORKSPACE_SERVICE_SHUTDOWN_GRACE: Duration = Duration::from_millis(250);
+const ORPHAN_WORKSPACE_SERVICE_KILL_GRACE: Duration = Duration::from_millis(250);
 
 #[derive(Parser)]
 #[command(name = "simdeck")]
@@ -616,8 +618,11 @@ enum ServiceCommand {
         access_token: Option<String>,
     },
     Restart {
-        #[arg(long, default_value_t = SERVICE_PORT)]
-        port: u16,
+        #[arg(
+            long,
+            help = "Defaults to the existing service port, or 4310 when no service state exists"
+        )]
+        port: Option<u16>,
         #[arg(long, default_value_t = IpAddr::V4(Ipv4Addr::LOCALHOST))]
         bind: IpAddr,
         #[arg(long)]
@@ -1518,7 +1523,11 @@ fn cleanup_orphaned_workspace_services(
             continue;
         }
         if killed_groups.insert(process.pgid) {
-            terminate_process_group(process.pgid, Duration::from_secs(3));
+            terminate_process_group_with_kill_timeout(
+                process.pgid,
+                ORPHAN_WORKSPACE_SERVICE_SHUTDOWN_GRACE,
+                ORPHAN_WORKSPACE_SERVICE_KILL_GRACE,
+            );
             killed.push(process);
         }
     }
@@ -1591,6 +1600,10 @@ fn command_arg_after(command: &str, flag: &str) -> Option<String> {
 }
 
 fn terminate_process_group(pid: u32, timeout: Duration) {
+    terminate_process_group_with_kill_timeout(pid, timeout, Duration::from_secs(2));
+}
+
+fn terminate_process_group_with_kill_timeout(pid: u32, timeout: Duration, kill_timeout: Duration) {
     signal_process_group(pid, "TERM");
     signal_process(pid, "TERM");
     if wait_for_process_exit(pid, timeout) {
@@ -1598,7 +1611,7 @@ fn terminate_process_group(pid: u32, timeout: Duration) {
     }
     signal_process_group(pid, "KILL");
     signal_process(pid, "KILL");
-    let _ = wait_for_process_exit(pid, Duration::from_secs(2));
+    let _ = wait_for_process_exit(pid, kill_timeout);
 }
 
 fn signal_process(pid: u32, signal: &str) {
@@ -2498,6 +2511,19 @@ fn restart_detached_service(options: ServiceLaunchOptions) -> anyhow::Result<()>
         terminate_service_metadata(&metadata)?;
     }
     start_detached_service(options)
+}
+
+fn service_restart_port(explicit_port: Option<u16>) -> anyhow::Result<u16> {
+    if let Some(port) = explicit_port {
+        return Ok(port);
+    }
+    if let Some(port) = service::installed_port()? {
+        return Ok(port);
+    }
+    if let Some(metadata) = read_service_metadata().ok().flatten() {
+        return Ok(metadata.port);
+    }
+    Ok(SERVICE_PORT)
 }
 
 struct PairGlobalServiceOptions {
@@ -3498,6 +3524,7 @@ fn main() -> anyhow::Result<()> {
                 stream_quality,
                 local_stream_fps,
             } => {
+                let port = service_restart_port(port)?;
                 cleanup_orphaned_workspace_services_for_root(None);
                 restart_detached_service(ServiceLaunchOptions {
                     port,
@@ -6025,6 +6052,27 @@ mod tests {
         };
         assert_eq!(port, 4315);
         assert_eq!(access_token.as_deref(), Some("explicit-token"));
+    }
+
+    #[test]
+    fn service_restart_command_preserves_omitted_port() {
+        let cli = Cli::parse_from(["simdeck", "service", "restart"]);
+        let Command::Service {
+            command: ServiceCommand::Restart { port, .. },
+        } = cli.command
+        else {
+            panic!("expected service restart command");
+        };
+        assert_eq!(port, None);
+
+        let cli = Cli::parse_from(["simdeck", "service", "restart", "--port", "4315"]);
+        let Command::Service {
+            command: ServiceCommand::Restart { port, .. },
+        } = cli.command
+        else {
+            panic!("expected service restart command");
+        };
+        assert_eq!(port, Some(4315));
     }
 
     #[test]
