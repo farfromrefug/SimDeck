@@ -30,6 +30,27 @@ const REDIRECT_PARAM = "redirect";
 const SESSION_COOKIE = "sdcp_session";
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 6;
 const JSON_CONTENT = "application/json; charset=utf-8";
+const APPLE_APP_SITE_ASSOCIATION_PATHS = new Set([
+  "/.well-known/apple-app-site-association",
+  "/apple-app-site-association",
+]);
+
+const APPLE_APP_SITE_ASSOCIATION = {
+  applinks: {
+    apps: [],
+    details: [
+      {
+        appID: "CS838V553Y.org.nativescript.simdeck",
+        paths: ["*"],
+        components: [
+          {
+            "/": "*",
+          },
+        ],
+      },
+    ],
+  },
+};
 
 export default {
   async fetch(request: Request): Promise<Response> {
@@ -47,6 +68,10 @@ export default {
 
 async function handleRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
+
+  if (APPLE_APP_SITE_ASSOCIATION_PATHS.has(url.pathname)) {
+    return appleAppSiteAssociationResponse();
+  }
 
   if (url.pathname === "/api/session") {
     return sessionMetadata(request);
@@ -92,6 +117,15 @@ async function handleRequest(request: Request): Promise<Response> {
   }
 
   return proxyToSimDeck(request, cookieSession);
+}
+
+function appleAppSiteAssociationResponse(): Response {
+  return new Response(JSON.stringify(APPLE_APP_SITE_ASSOCIATION), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
 }
 
 function sessionMetadata(request: Request): Response {
