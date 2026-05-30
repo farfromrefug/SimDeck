@@ -749,7 +749,9 @@ fn proxied_target_port(target_id: &str) -> Result<u16, String> {
 fn metro_devtools_frontend_url(port: u16, entry: &Value, web_socket_debugger_url: &str) -> String {
     let frontend = string_value(entry, "devtoolsFrontendUrl");
     let asset_path = metro_frontend_asset_path(frontend.as_deref());
-    let query = frontend.as_deref().and_then(|value| split_path_query(value).1);
+    let query = frontend
+        .as_deref()
+        .and_then(|value| split_path_query(value).1);
     // Reverse-proxy Metro's own (version-matched) Fusebox frontend through the
     // SimDeck origin so the LAN client and Studio app can reach it, with the
     // socket rewritten to the proxied inspector path.
@@ -846,8 +848,9 @@ pub async fn fetch_metro_frontend_asset(
         .await
         .map_err(|_| format!("Timed out connecting to Metro at {address}."))?
         .map_err(|error| format!("Unable to connect to Metro at {address}: {error}"))?;
-    let request =
-        format!("GET {target} HTTP/1.1\r\nHost: {address}\r\nAccept: */*\r\nConnection: close\r\n\r\n");
+    let request = format!(
+        "GET {target} HTTP/1.1\r\nHost: {address}\r\nAccept: */*\r\nConnection: close\r\n\r\n"
+    );
     timeout(METRO_ASSET_TIMEOUT, stream.write_all(request.as_bytes()))
         .await
         .map_err(|_| "Timed out requesting Metro asset.".to_owned())?
@@ -1773,9 +1776,7 @@ mod tests {
     #[test]
     fn upstream_websocket_origin_matches_metro_dev_server() {
         assert_eq!(
-            upstream_websocket_origin(
-                "ws://127.0.0.1:8082/inspector/debug?device=abc&page=1"
-            ),
+            upstream_websocket_origin("ws://127.0.0.1:8082/inspector/debug?device=abc&page=1"),
             Some("http://127.0.0.1:8082".to_owned())
         );
         assert_eq!(

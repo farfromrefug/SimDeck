@@ -236,7 +236,7 @@ fn origin_is_allowed(config: &Config, origin: &str) -> bool {
         format!("http://[::1]:{}", config.http_port),
     ];
     allowed.iter().any(|value| value == origin)
-        || LAUNCHPAD_ORIGINS.iter().any(|value| *value == origin)
+        || LAUNCHPAD_ORIGINS.contains(&origin)
         || extra_allowed_origins().any(|value| value == "*" || value == origin)
 }
 
