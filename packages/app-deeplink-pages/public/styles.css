@@ -40,13 +40,8 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "SF Pro Text",
-    "Segoe UI",
-    Inter,
-    system-ui,
-    sans-serif;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter,
+    system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -61,12 +56,7 @@ a:hover {
 
 code {
   font-family:
-    ui-monospace,
-    SFMono-Regular,
-    "SF Mono",
-    Menlo,
-    Consolas,
-    monospace;
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   background: rgba(127, 127, 127, 0.14);
   padding: 1px 6px;
   border-radius: 5px;

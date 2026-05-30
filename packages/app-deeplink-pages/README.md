@@ -67,18 +67,18 @@ The iOS app's `StudioLinkResolver` handles these paths on `app.simdeck.sh`:
 
 Query params:
 
-| param                              | meaning                                                          |
-| ---------------------------------- | ---------------------------------------------------------------- |
-| `host` (required)                  | Where SimDeck is reachable from the phone (LAN IP, tunnel host). |
-| `port`                             | Port (defaults vary).                                            |
-| `scheme`                           | `http` or `https`. Default `http`.                               |
-| `udid` / `device`                  | Auto-select this simulator and auto-start streaming.             |
-| `serverId` / `sid` / `s`           | Hash identifying which SimDeck instance this is.                 |
-| `hostId` / `hid`                   | Stable host identifier (machine-level).                          |
-| `hostName` / `hname`               | Human-readable host name for the picker.                         |
-| `serverKind` / `kind`              | `launchAgent`, `foreground`, `standalone`, …                     |
-| `token` / `simdeckToken`           | Pre-shared access token (optional).                              |
-| `code` / `pairingCode` (on /pair)  | Pairing code for first-time link-up.                             |
+| param                             | meaning                                                          |
+| --------------------------------- | ---------------------------------------------------------------- |
+| `host` (required)                 | Where SimDeck is reachable from the phone (LAN IP, tunnel host). |
+| `port`                            | Port (defaults vary).                                            |
+| `scheme`                          | `http` or `https`. Default `http`.                               |
+| `udid` / `device`                 | Auto-select this simulator and auto-start streaming.             |
+| `serverId` / `sid` / `s`          | Hash identifying which SimDeck instance this is.                 |
+| `hostId` / `hid`                  | Stable host identifier (machine-level).                          |
+| `hostName` / `hname`              | Human-readable host name for the picker.                         |
+| `serverKind` / `kind`             | `launchAgent`, `foreground`, `standalone`, …                     |
+| `token` / `simdeckToken`          | Pre-shared access token (optional).                              |
+| `code` / `pairingCode` (on /pair) | Pairing code for first-time link-up.                             |
 
 The Universal Link `https://app.simdeck.sh/open?...` and the custom-scheme
 `simdeck://open?...` carry the same query string and are interchangeable.
