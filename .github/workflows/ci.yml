@@ -399,7 +399,8 @@ jobs:
           Invoke-AndroidToolWithInput $sdkmanager "--install `"platform-tools`" `"emulator`" `"$windowsPlatform`" `"$windowsSystemImage`"" $yesFile
           Write-Host "Checking Android emulator acceleration"
           & $emulator -accel-check
-          if ($LASTEXITCODE -ne 0) {
+          $accelSupported = $LASTEXITCODE -eq 0
+          if (-not $accelSupported) {
             Write-Host "Hosted Windows runner did not report VM acceleration; forcing software acceleration for the CI smoke emulator."
           }
           Write-Host "Creating Android AVD"
@@ -416,10 +417,14 @@ jobs:
             "-gpu", "swiftshader_indirect",
             "-grpc", "8554",
             "-port", "5554",
-            "-accel", "off",
             "-no-metrics",
             "-skip-adb-auth"
           )
+          if ($accelSupported) {
+            $args += @("-accel", "on")
+          } else {
+            $args += @("-accel", "off")
+          }
           function Write-EmulatorDiagnostics {
             Write-Host "adb devices:"
             & $adb devices -l
@@ -435,7 +440,7 @@ jobs:
           Write-Host "Starting Android emulator"
           $process = Start-Process -FilePath $emulator -ArgumentList $args -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
           $process.Id | Out-File -FilePath emulator.pid -Encoding ascii
-          $deviceDeadline = (Get-Date).AddMinutes(8)
+          $deviceDeadline = (Get-Date).AddMinutes(10)
           $deviceSeen = $false
           do {
             if ($process.HasExited) {

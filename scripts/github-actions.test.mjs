@@ -80,12 +80,14 @@ test("Windows Android CI boot path is bounded and diagnostic", () => {
     "Android emulator integration tests (Windows)",
   );
 
-  assert.match(windowsBootStep, /-accel", "off"/);
+  assert.match(windowsBootStep, /\$accelSupported = \$LASTEXITCODE -eq 0/);
+  assert.match(windowsBootStep, /"-accel", "on"/);
+  assert.match(windowsBootStep, /"-accel", "off"/);
   assert.match(windowsBootStep, /-RedirectStandardOutput \$stdout/);
   assert.match(windowsBootStep, /Write-EmulatorDiagnostics/);
   assert.match(
     windowsBootStep,
-    /deviceDeadline = \(Get-Date\)\.AddMinutes\(8\)/,
+    /deviceDeadline = \(Get-Date\)\.AddMinutes\(10\)/,
   );
   assert.doesNotMatch(windowsBootStep, /wait-for-device/);
 });
