@@ -16,15 +16,15 @@ const requireRunningAndroid =
   process.env.SIMDECK_INTEGRATION_REQUIRE_RUNNING_ANDROID === "1" ||
   process.env.CI === "true";
 const requestedAvd = process.env.SIMDECK_INTEGRATION_ANDROID_AVD;
-const androidLaunchTarget =
-  process.env.SIMDECK_INTEGRATION_ANDROID_LAUNCH_TARGET ??
-  "com.android.settings/.Settings";
+const requestedAndroidLaunchTarget =
+  process.env.SIMDECK_INTEGRATION_ANDROID_LAUNCH_TARGET;
 const defaultStepTimeoutMs = Number(
   process.env.SIMDECK_INTEGRATION_STEP_TIMEOUT_MS ?? "180000",
 );
 
 let session = null;
 let androidUDID = "";
+let androidLaunchTarget = null;
 let shutdownAndroidAfterRun = false;
 const stepTimings = [];
 
@@ -104,6 +104,12 @@ async function main() {
         await waitForBooted(androidUDID);
       },
       { timeoutMs: target.isBooted ? 120_000 : 300_000 },
+    );
+
+    androidLaunchTarget = await measuredStep(
+      "resolve Android launch target",
+      () => resolveAndroidLaunchTarget(),
+      { timeoutMs: 60_000 },
     );
 
     await runCliSurface();
@@ -216,12 +222,35 @@ async function runCliSurface() {
     }
   });
   await measuredStep("CLI app launch and URL", () => {
-    simdeckJson(["launch", androidUDID, androidLaunchTarget], {
-      timeoutMs: 60_000,
-    });
-    simdeckJson(["open-url", androidUDID, "https://example.com"], {
-      timeoutMs: 60_000,
-    });
+    if (androidLaunchTarget) {
+      try {
+        simdeckJson(["launch", androidUDID, androidLaunchTarget], {
+          timeoutMs: 60_000,
+        });
+      } catch (error) {
+        if (
+          requestedAndroidLaunchTarget ||
+          !isAndroidIntentUnavailable(error)
+        ) {
+          throw error;
+        }
+        console.log(
+          `Android image rejected discovered launch target ${androidLaunchTarget}; continuing with URL/home coverage.`,
+        );
+      }
+    } else {
+      console.log("Android image did not expose a launchable activity.");
+    }
+    try {
+      simdeckJson(["open-url", androidUDID, "https://example.com"], {
+        timeoutMs: 60_000,
+      });
+    } catch (error) {
+      if (!isAndroidIntentUnavailable(error)) {
+        throw error;
+      }
+      console.log("Android image did not expose an https URL handler.");
+    }
     simdeckJson(["home", androidUDID]);
   });
   await measuredStep("CLI pointer gestures", () => {
@@ -358,8 +387,29 @@ async function runJsSurface() {
     }
   });
   await measuredStep("JS app launch and URL", async () => {
-    await session.launch(androidUDID, androidLaunchTarget);
-    await session.openUrl(androidUDID, "https://example.com");
+    if (androidLaunchTarget) {
+      try {
+        await session.launch(androidUDID, androidLaunchTarget);
+      } catch (error) {
+        if (
+          requestedAndroidLaunchTarget ||
+          !isAndroidIntentUnavailable(error)
+        ) {
+          throw error;
+        }
+        console.log(
+          `Android image rejected discovered launch target ${androidLaunchTarget}; continuing with URL/home coverage.`,
+        );
+      }
+    }
+    try {
+      await session.openUrl(androidUDID, "https://example.com");
+    } catch (error) {
+      if (!isAndroidIntentUnavailable(error)) {
+        throw error;
+      }
+      console.log("Android image did not expose an https URL handler.");
+    }
     await session.home(androidUDID);
   });
   await measuredStep("JS pointer gestures", async () => {
@@ -461,19 +511,128 @@ function resolveAndroidDevice() {
     : null;
 }
 
+function resolveAndroidLaunchTarget() {
+  if (requestedAndroidLaunchTarget) {
+    return requestedAndroidLaunchTarget;
+  }
+  const adb = androidSdkTool("platform-tools/adb");
+  if (!adb) {
+    return null;
+  }
+  const serial = onlineAndroidSerials(adb)[0];
+  if (!serial) {
+    return null;
+  }
+  const queries = [
+    [
+      "cmd",
+      "package",
+      "query-activities",
+      "--brief",
+      "--components",
+      "-a",
+      "android.intent.action.MAIN",
+      "-c",
+      "android.intent.category.LAUNCHER",
+    ],
+    [
+      "cmd",
+      "package",
+      "query-activities",
+      "--brief",
+      "--components",
+      "-a",
+      "android.intent.action.MAIN",
+    ],
+    [
+      "cmd",
+      "package",
+      "resolve-activity",
+      "--brief",
+      "--components",
+      "-a",
+      "android.intent.action.MAIN",
+      "-c",
+      "android.intent.category.LAUNCHER",
+    ],
+    [
+      "cmd",
+      "package",
+      "resolve-activity",
+      "--brief",
+      "--components",
+      "-a",
+      "android.intent.action.MAIN",
+    ],
+  ];
+  for (const query of queries) {
+    try {
+      const output = runText(adb, ["-s", serial, "shell", ...query], {
+        timeoutMs: 30_000,
+      });
+      const target = chooseAndroidLaunchComponent(
+        parseAndroidActivityComponents(output),
+      );
+      if (target) {
+        if (verbose) {
+          console.log(`Android launch target ${target}`);
+        }
+        return target;
+      }
+    } catch (error) {
+      if (verbose) {
+        console.log(
+          `Android launch target query failed: ${error.message.split("\n")[0]}`,
+        );
+      }
+    }
+  }
+  return null;
+}
+
+function parseAndroidActivityComponents(output) {
+  const components = [];
+  for (const line of output.split(/\r?\n/)) {
+    for (const token of line.trim().split(/\s+/)) {
+      if (
+        /^[A-Za-z0-9_.]+\/(?:[A-Za-z0-9_.$]+|\.[A-Za-z0-9_.$]+)$/.test(token)
+      ) {
+        components.push(token);
+      }
+    }
+  }
+  return [...new Set(components)];
+}
+
+function chooseAndroidLaunchComponent(components) {
+  const preferredPackages = [
+    "com.android.settings/",
+    "com.google.android.apps.nexuslauncher/",
+    "com.android.launcher3/",
+  ];
+  for (const packagePrefix of preferredPackages) {
+    const component = components.find((value) =>
+      value.startsWith(packagePrefix),
+    );
+    if (component) {
+      return component;
+    }
+  }
+  return (
+    components.find(
+      (value) =>
+        !value.startsWith("com.android.systemui/") &&
+        !value.startsWith("android/"),
+    ) ?? null
+  );
+}
+
 function runningAndroidAvds(fallbackAvdName = "") {
   const adb = androidSdkTool("platform-tools/adb");
   if (!adb) {
     return new Set();
   }
-  const devices = runText(adb, ["devices"], { timeoutMs: 30_000 })
-    .split(/\r?\n/)
-    .map((line) => line.trim().split(/\s+/))
-    .filter(
-      ([serial, state]) =>
-        serial?.startsWith("emulator-") && state === "device",
-    )
-    .map(([serial]) => serial);
+  const devices = onlineAndroidSerials(adb);
   const avds = new Set();
   for (const serial of devices) {
     const name = androidAvdNameForSerial(adb, serial);
@@ -485,6 +644,17 @@ function runningAndroidAvds(fallbackAvdName = "") {
     avds.add(fallbackAvdName);
   }
   return avds;
+}
+
+function onlineAndroidSerials(adb) {
+  return runText(adb, ["devices"], { timeoutMs: 30_000 })
+    .split(/\r?\n/)
+    .map((line) => line.trim().split(/\s+/))
+    .filter(
+      ([serial, state]) =>
+        serial?.startsWith("emulator-") && state === "device",
+    )
+    .map(([serial]) => serial);
 }
 
 function androidAvdNameForSerial(adb, serial) {
@@ -713,6 +883,13 @@ function assertClipboardUnsupported(errorOrResult) {
   assert.match(
     message,
     /clipboard shell service is not implemented|No shell command implementation/i,
+  );
+}
+
+function isAndroidIntentUnavailable(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /unable to resolve Intent|No Activity found|Activity class .* does not exist/i.test(
+    message,
   );
 }
 
