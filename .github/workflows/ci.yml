@@ -490,9 +490,10 @@ jobs:
           $env:SIMDECK_INTEGRATION_REQUIRE_RUNNING_ANDROID = "1"
           $env:SIMDECK_INTEGRATION_VERBOSE = "1"
           npm run test:integration:android
-          if ($LASTEXITCODE -ne 0) {
+          $testExitCode = $LASTEXITCODE
+          if ($testExitCode -ne 0) {
             Write-EmulatorDiagnostics
-            throw "Android integration tests failed with exit code $LASTEXITCODE."
+            throw "Android integration tests failed with exit code $testExitCode."
           }
 
       - name: Stop Android emulator (Windows)

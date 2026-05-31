@@ -114,6 +114,7 @@ test("Android integration runner resolves Windows executables", () => {
     androidIntegration,
     /fallbackAvdName && avds\.size === 0 && devices\.length === 1/,
   );
+  assert.match(androidIntegration, /com\.android\.settings\/\.Settings/);
   assert.match(androidIntegration, /simdeck-bin\.exe/);
   assert.match(androidIntegration, /simdeck-bin-win32-x64\.exe/);
   assert.match(androidIntegration, /AppData", "Local", "Android", "Sdk/);

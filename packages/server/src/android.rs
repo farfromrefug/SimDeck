@@ -447,6 +447,10 @@ impl AndroidBridge {
 
     pub fn launch_package(&self, id: &str, package: &str) -> Result<(), AppError> {
         let serial = self.serial_for_id(id)?;
+        if is_android_component_name(package) {
+            self.run_adb(["-s", &serial, "shell", "am", "start", "-n", package])?;
+            return Ok(());
+        }
         self.run_adb([
             "-s",
             &serial,
@@ -1708,6 +1712,13 @@ fn parse_online_emulator_serials(output: &str) -> Vec<String> {
         .collect()
 }
 
+fn is_android_component_name(value: &str) -> bool {
+    value
+        .split_once('/')
+        .map(|(package, activity)| !package.is_empty() && !activity.is_empty())
+        .unwrap_or(false)
+}
+
 fn android_cmdline_tool_path(name: &str) -> PathBuf {
     let root = sdk_root();
     let latest = android_sdk_tool_path_for_os(
@@ -2633,6 +2644,17 @@ abcd1234\tdevice
 ";
 
         assert_eq!(parse_online_emulator_serials(output), vec!["emulator-5554"]);
+    }
+
+    #[test]
+    fn android_component_names_require_package_and_activity() {
+        assert!(is_android_component_name("com.android.settings/.Settings"));
+        assert!(is_android_component_name(
+            "com.example/com.example.MainActivity"
+        ));
+        assert!(!is_android_component_name("com.example"));
+        assert!(!is_android_component_name("com.example/"));
+        assert!(!is_android_component_name("/.MainActivity"));
     }
 }
 

@@ -16,6 +16,9 @@ const requireRunningAndroid =
   process.env.SIMDECK_INTEGRATION_REQUIRE_RUNNING_ANDROID === "1" ||
   process.env.CI === "true";
 const requestedAvd = process.env.SIMDECK_INTEGRATION_ANDROID_AVD;
+const androidLaunchTarget =
+  process.env.SIMDECK_INTEGRATION_ANDROID_LAUNCH_TARGET ??
+  "com.android.settings/.Settings";
 const defaultStepTimeoutMs = Number(
   process.env.SIMDECK_INTEGRATION_STEP_TIMEOUT_MS ?? "180000",
 );
@@ -213,7 +216,7 @@ async function runCliSurface() {
     }
   });
   await measuredStep("CLI app launch and URL", () => {
-    simdeckJson(["launch", androidUDID, "com.android.settings"], {
+    simdeckJson(["launch", androidUDID, androidLaunchTarget], {
       timeoutMs: 60_000,
     });
     simdeckJson(["open-url", androidUDID, "https://example.com"], {
@@ -355,7 +358,7 @@ async function runJsSurface() {
     }
   });
   await measuredStep("JS app launch and URL", async () => {
-    await session.launch(androidUDID, "com.android.settings");
+    await session.launch(androidUDID, androidLaunchTarget);
     await session.openUrl(androidUDID, "https://example.com");
     await session.home(androidUDID);
   });
