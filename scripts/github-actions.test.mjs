@@ -83,6 +83,7 @@ test("Windows Android CI boot path is bounded and diagnostic", () => {
   assert.match(windowsBootStep, /\$accelSupported = \$LASTEXITCODE -eq 0/);
   assert.match(windowsBootStep, /google_atd/);
   assert.match(windowsBootStep, /"-qt-hide-window"/);
+  assert.match(windowsBootStep, /"-feature", "-Vulkan"/);
   assert.match(windowsBootStep, /"-accel", "on"/);
   assert.match(windowsBootStep, /"-accel", "off"/);
   assert.match(windowsBootStep, /-RedirectStandardOutput \$stdout/);

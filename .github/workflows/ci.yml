@@ -417,6 +417,7 @@ jobs:
             "-no-snapshot-save",
             "-wipe-data",
             "-gpu", "swiftshader_indirect",
+            "-feature", "-Vulkan",
             "-grpc", "8554",
             "-port", "5554",
             "-no-metrics",

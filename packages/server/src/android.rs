@@ -320,22 +320,26 @@ impl AndroidBridge {
         }
         let grpc_port = self.grpc_port_for_avd(&avd_name)?;
         let grpc_port = grpc_port.to_string();
-        let window_mode = if cfg!(target_os = "windows") {
+        let is_windows = cfg!(target_os = "windows");
+        let window_mode = if is_windows {
             "-qt-hide-window"
         } else {
             "-no-window"
         };
+        let mut args = vec![
+            "-avd",
+            &avd_name,
+            window_mode,
+            "-no-audio",
+            "-gpu",
+            "swiftshader_indirect",
+        ];
+        if is_windows {
+            args.extend(["-feature", "-Vulkan"]);
+        }
+        args.extend(["-grpc", &grpc_port]);
         Command::new(self.emulator_path())
-            .args([
-                "-avd",
-                &avd_name,
-                window_mode,
-                "-no-audio",
-                "-gpu",
-                "swiftshader_indirect",
-                "-grpc",
-                &grpc_port,
-            ])
+            .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
