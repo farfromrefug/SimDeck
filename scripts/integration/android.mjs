@@ -433,9 +433,9 @@ function resolveAndroidDevice() {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  const running = runningAndroidAvds();
   if (requestedAvd) {
     const avdName = requestedAvd.replace(/^android:/, "");
+    const running = runningAndroidAvds(avdName);
     if (!avds.includes(avdName)) {
       throw new Error(
         `SIMDECK_INTEGRATION_ANDROID_AVD=${requestedAvd} was not found. Available Android AVDs: ${avds.join(", ")}`,
@@ -447,6 +447,7 @@ function resolveAndroidDevice() {
       isBooted: running.has(avdName),
     };
   }
+  const running = runningAndroidAvds();
   const avdName = avds[0];
   return avdName
     ? {
@@ -457,7 +458,7 @@ function resolveAndroidDevice() {
     : null;
 }
 
-function runningAndroidAvds() {
+function runningAndroidAvds(fallbackAvdName = "") {
   const adb = androidSdkTool("platform-tools/adb");
   if (!adb) {
     return new Set();
@@ -476,6 +477,9 @@ function runningAndroidAvds() {
     if (name) {
       avds.add(name);
     }
+  }
+  if (fallbackAvdName && avds.size === 0 && devices.length === 1) {
+    avds.add(fallbackAvdName);
   }
   return avds;
 }

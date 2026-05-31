@@ -965,9 +965,16 @@ impl AndroidBridge {
     }
 
     fn resolve_serial(&self, avd_name: &str) -> Result<String, AppError> {
-        self.running_emulators()?.remove(avd_name).ok_or_else(|| {
-            AppError::native(format!("Android emulator `{avd_name}` is not running."))
-        })
+        if let Some(serial) = self.running_emulators()?.remove(avd_name) {
+            return Ok(serial);
+        }
+        let serials = self.online_emulator_serials()?;
+        if serials.len() == 1 && self.known_avd(avd_name)? {
+            return Ok(serials[0].clone());
+        }
+        Err(AppError::native(format!(
+            "Android emulator `{avd_name}` is not running."
+        )))
     }
 
     fn running_emulators(&self) -> Result<HashMap<String, String>, AppError> {
@@ -981,21 +988,26 @@ impl AndroidBridge {
         if !self.adb_path().exists() {
             return Ok(HashMap::new());
         }
-        let output = self.run_adb(["devices"])?;
         let mut result = HashMap::new();
-        for line in output.lines().skip(1) {
-            let mut parts = line.split_whitespace();
-            let Some(serial) = parts.next() else { continue };
-            let Some(state) = parts.next() else { continue };
-            if state != "device" || !serial.starts_with("emulator-") {
-                continue;
-            }
-            if let Some(name) = self.avd_name_for_serial(serial) {
-                result.insert(name, serial.to_owned());
+        for serial in self.online_emulator_serials()? {
+            if let Some(name) = self.avd_name_for_serial(&serial) {
+                result.insert(name, serial);
             }
         }
         *cache.lock().unwrap() = Some((Instant::now(), result.clone()));
         Ok(result)
+    }
+
+    fn online_emulator_serials(&self) -> Result<Vec<String>, AppError> {
+        Ok(parse_online_emulator_serials(&self.run_adb(["devices"])?))
+    }
+
+    fn known_avd(&self, avd_name: &str) -> Result<bool, AppError> {
+        Ok(self
+            .run_emulator(["-list-avds"])?
+            .lines()
+            .map(str::trim)
+            .any(|name| name == avd_name))
     }
 
     fn avd_name_for_serial(&self, serial: &str) -> Option<String> {
@@ -1681,6 +1693,19 @@ fn android_sdk_tool_path_for_os(root: &Path, relative_path: &str, os: &str) -> P
         path.set_extension("exe");
     }
     path
+}
+
+fn parse_online_emulator_serials(output: &str) -> Vec<String> {
+    output
+        .lines()
+        .skip(1)
+        .filter_map(|line| {
+            let mut parts = line.split_whitespace();
+            let serial = parts.next()?;
+            let state = parts.next()?;
+            (state == "device" && serial.starts_with("emulator-")).then(|| serial.to_owned())
+        })
+        .collect()
 }
 
 fn android_cmdline_tool_path(name: &str) -> PathBuf {
@@ -2596,6 +2621,18 @@ port.serial=5554
             android_sdk_tool_path_for_os(root, "platform-tools/adb", "linux"),
             root.join("platform-tools").join("adb")
         );
+    }
+
+    #[test]
+    fn parse_online_emulator_serials_ignores_offline_devices() {
+        let output = "\
+List of devices attached
+emulator-5554\tdevice
+emulator-5556\toffline
+abcd1234\tdevice
+";
+
+        assert_eq!(parse_online_emulator_serials(output), vec!["emulator-5554"]);
     }
 }
 
